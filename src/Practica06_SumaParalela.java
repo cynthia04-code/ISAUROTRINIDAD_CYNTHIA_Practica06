@@ -1,7 +1,9 @@
 public class Practica06_SumaParalela {
+    // LÍMITE superior de la suma (fijo por el enunciado)
     private static final int N_MAX = 1_000_000;
 
     public static void main(String[] args) {
+        // Si el usuario pasa un número como argumento, lo usamos como N (validado más abajo)
         if (args.length == 1) {
             try {
                 int nThreads = Integer.parseInt(args[0]);
@@ -28,6 +30,7 @@ public class Practica06_SumaParalela {
         }
     }
 
+    // Ejecuta y muestra un experimento con N hilos y valida la entrada
     private static void runSingleExperiment(int nThreads) {
         if (nThreads <= 0) {
             System.err.println("Error: n debe ser un entero positivo.");
@@ -39,20 +42,24 @@ public class Practica06_SumaParalela {
         System.out.printf("Tiempo: %.3f ms\n", r.timeNs / 1_000_000.0);
     }
 
+    // Estructura simple para retornar resultado y tiempo
     private static class ExperimentResult {
         long sum;
         long timeNs;
         ExperimentResult(long sum, long timeNs) { this.sum = sum; this.timeNs = timeNs; }
     }
 
+    // Mide el tiempo de cálculo usando nThreads hilos
     private static ExperimentResult measure(int nThreads) {
+        // Validaci\u00f3n de nThreads
         if (nThreads <= 0) throw new IllegalArgumentException("nThreads debe ser > 0");
 
         final java.util.concurrent.atomic.AtomicLongArray partials = new java.util.concurrent.atomic.AtomicLongArray(nThreads);
         Thread[] threads = new Thread[nThreads];
- 
+
+        // Divisi\u00f3n de trabajo: distribuimos el resto entre los primeros r hilos
         int base = N_MAX / nThreads;
-        int rem = N_MAX % nThreads; 
+        int rem = N_MAX % nThreads; // algunos hilos har\u00e1n 1 elemento extra
 
         int start = 1;
         for (int i = 0; i < nThreads; i++) {
@@ -66,29 +73,37 @@ public class Practica06_SumaParalela {
                 for (int j = s; j <= e; j++) {
                     localSum += computeFi(j);
                 }
+                // escribir resultado parcial en estructura segura para hilos
                 partials.set(idx, localSum);
             }, "Worker-" + i);
             start = end + 1;
         }
-      
+
+        // Comprueba que cubrimos todo el rango sin omisiones ni duplicados
+        // (comprobaci\u00f3n por seguridad)
         if (start != N_MAX + 1) {
             throw new IllegalStateException("Error en la asignaci\u00f3n de rangos: no se cubre todo el intervalor");
         }
 
         long t0 = System.nanoTime();
+        // Iniciar hilos
         for (Thread th : threads) th.start();
+        // Esperar a que terminen
         for (Thread th : threads) {
             try { th.join(); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); System.err.println("Main interrumpido"); }
         }
         long t1 = System.nanoTime();
 
+        // Ensamblar resultado (no hay condiciones de carrera porque todos los hilos ya terminaron y join() establece happens-before)
         long total = 0L;
         for (int i = 0; i < partials.length(); i++) total += partials.get(i);
 
         return new ExperimentResult(total, t1 - t0);
     }
-  
+
+    // Definici\u00f3n de f(i) -- modificar aqu\u00ed si la funci\u00f3n fuera otra
     private static long computeFi(int i) {
+        // Interpretaci\u00f3n usada: f(i) = i^2 + 3*i + 1
         long li = i;
         return li * li + 3L * li + 1L;
     }
